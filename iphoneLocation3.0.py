@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+from __future__ import annotations  # 新增此行，解决Python 3.8的类型注解兼容性问题
+
 """
 读取 peopleList.csv → 生成步步高 USB 电话通讯录专用 CSV
 打包：pyinstaller -F -w bbk_csv_tool.py
