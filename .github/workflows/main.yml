@@ -38,34 +38,34 @@ jobs:
       - name: 创建版本信息文件
         run: |
           @'
-VSVersionInfo(
-  ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
-    mask=0x3f,
-    flags=0x0,
-    OS=0x40004,
-    fileType=0x1,
-    subtype=0x0,
-    date=(0, 0)
-  ),
-  kids=[
-    StringFileInfo([
-      StringTable(
-        u'040904B0',
-        [StringStruct(u'CompanyName', u'利辛农商行'),
-         StringStruct(u'FileDescription', u'电话回访辅助工具'),
-         StringStruct(u'FileVersion', u'1.0.0.0'),
-         StringStruct(u'InternalName', u'电话回访辅助'),
-         StringStruct(u'LegalCopyright', u'Copyright © 2023'),
-         StringStruct(u'OriginalFilename', u'利辛农商行电话回访辅助.exe'),
-         StringStruct(u'ProductName', u'电话回访辅助工具'),
-         StringStruct(u'ProductVersion', u'1.0.0.0')])
-    ]),
-    VarFileInfo([VarStruct(u'Translation', [0x409, 1200])])
-  ]
-)
-'@ | Out-File -FilePath version_info.txt -Encoding UTF8
+              VSVersionInfo(
+                ffi=FixedFileInfo(
+                  filevers=(1, 0, 0, 0),
+                  prodvers=(1, 0, 0, 0),
+                  mask=0x3f,
+                  flags=0x0,
+                  OS=0x40004,
+                  fileType=0x1,
+                  subtype=0x0,
+                  date=(0, 0)
+                ),
+                kids=[
+                  StringFileInfo([
+                    StringTable(
+                      u'040904B0',
+                      [StringStruct(u'CompanyName', u'利辛农商行'),
+                       StringStruct(u'FileDescription', u'电话回访辅助工具'),
+                       StringStruct(u'FileVersion', u'1.0.0.0'),
+                       StringStruct(u'InternalName', u'电话回访辅助'),
+                       StringStruct(u'LegalCopyright', u'Copyright © 2023'),
+                       StringStruct(u'OriginalFilename', u'利辛农商行电话回访辅助.exe'),
+                       StringStruct(u'ProductName', u'电话回访辅助工具'),
+                       StringStruct(u'ProductVersion', u'1.0.0.0')])
+                  ]),
+                  VarFileInfo([VarStruct(u'Translation', [0x409, 1200])])
+                ]
+              )
+              '@ | Out-File -FilePath version_info.txt -Encoding UTF8
 
       - name: 执行打包
         run: |
