@@ -5,6 +5,7 @@ from __future__ import annotations  # 新增此行，解决Python 3.8的类型�
 """
 读取 peopleList.csv → 生成步步高 USB 电话通讯录专用 CSV
 打包：pyinstaller -F -w bbk_csv_tool.py
+用于GitHub action编译 win7 exe
 """
 import os
 import sys
@@ -77,14 +78,30 @@ class MainWin(QWidget):
             QMessageBox.critical(self, '错误', f'当前目录未找到：\n{CSV_FILE}')
             return
         try:
-            # 自动推断编码，兼容 UTF-8 / GBK
-            df = pd.read_csv(CSV_FILE, dtype=str, encoding='gb18030').fillna('')
+            # 尝试多种编码格式读取
+            encodings_to_try = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030']
+            df = None
+            last_error = None
+
+            for enc in encodings_to_try:
+                try:
+                    df = pd.read_csv(CSV_FILE, dtype=str, encoding=enc).fillna('')
+                    print(f"成功使用编码读取: {enc}")  # 调试信息，打包后可移除
+                    break  # 读取成功则跳出循环
+                except UnicodeDecodeError as e:
+                    last_error = e
+                    continue  # 尝试下一种编码
+
+            if df is None:
+                # 所有编码都失败，抛出最后一个错误
+                raise last_error
+            
         except Exception as e:
-            QMessageBox.critical(self, '读 csv 失败', str(e))
+            QMessageBox.critical(self, '读 csv 失败', f'文件编码无法识别。\n请确保文件使用 UTF-8 或 GBK 编码保存。\n\n错误详情:\n{str(e)}')
             return
 
         # 逐行从左到右扫描：客户姓名/手机/担保人姓名/手机
-        rows = []
+        records = []  # 存储原始记录，用于后续添加序号
         for _, line in df.iterrows():
             # 客户
             name1 = str(line.get('客户姓名', '')).strip()
@@ -92,18 +109,31 @@ class MainWin(QWidget):
             if mob1:
                 if self.need_prefix(mob1):
                     mob1 = '0' + mob1
-                rows.append([f"{name1}_{mob1}", mob1])
+                records.append((name1, mob1, "客户"))
+            
             # 担保人
             name2 = str(line.get('担保人姓名', '')).strip()
             mob2  = str(line.get('手机号码.1', '')).strip()  # 第二列手机号标题
             if mob2:
                 if self.need_prefix(mob2):
                     mob2 = '0' + mob2
-                rows.append([f"{name2}_担_{mob2}", mob2])
+                records.append((name2, mob2, "担保人"))
 
-        if not rows:
+        if not records:
             QMessageBox.information(self, '提示', '未找到任何有效手机号')
             return
+
+        # 添加序号到姓名，格式为：001.姓名_手机
+        rows = []
+        for i, (name, mobile, role) in enumerate(records, 1):
+            # 生成三位数序号，如001, 002, ...
+            seq = f"{i:03d}."  # 格式化为三位数字加一个点
+            # 姓名格式：序号姓名:手机 (添加冒号分隔)
+            if role == '担保人':
+                name_with_seq = f"{seq}{name}_担保_{mobile}"
+            else:
+                name_with_seq = f"{seq}{name}_{mobile}"
+            rows.append([name_with_seq, mobile])
 
         # 写步步高 CSV
         try:
@@ -117,9 +147,16 @@ class MainWin(QWidget):
             QMessageBox.critical(self, '写CSV失败', str(e))
             return
 
-        # 日志
-        text = '\n'.join(['\t'.join(r) for r in rows])
-        self.log.setPlainText(f'共生成 {len(rows)} 条记录，已写入步步高兼容CSV：\n\n' + text)
+        # 日志 - 显示带序号的记录
+        text_lines = []
+        for i, (name, mobile, role) in enumerate(records, 1):
+            seq = f"{i:03d}."
+            text_lines.append(f"{seq} {role}: {name} - {mobile}")
+        
+        text = '\n'.join(text_lines)
+        self.log.setPlainText(f'共生成 {len(records)} 条记录，已写入步步高兼容CSV：\n\n' + text)
+        
+        
 
 
 if __name__ == '__main__':
