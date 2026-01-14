@@ -5,14 +5,14 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:  # 允许手动触发
+  workflow_dispatch:
 
 jobs:
   build-win7:
-    runs-on: windows-2019  # GitHub 最接近 Win7 的可用环境
+    runs-on: windows-2019
     strategy:
       matrix:
-        python-version: ['3.8.10']  # 最后官方支持 Win7 的 Python 版本
+        python-version: ['3.8.10']
     
     steps:
     - name: 检出代码
@@ -24,7 +24,7 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        architecture: 'x86'  # 32位更兼容 Win7
+        architecture: 'x86'
     
     - name: 显示 Python 版本信息
       run: |
@@ -33,36 +33,25 @@ jobs:
     
     - name: 安装依赖
       run: |
-        # 升级 pip 避免问题
         python -m pip install --upgrade pip setuptools wheel
-        
-        # 安装精确版本，确保兼容性
         pip install pyinstaller==5.0
         pip install pandas==1.3.5
         pip install PyQt5==5.15.4
         pip install PyQt5-sip==12.9.0
         pip install phone==0.4.3
-        
-        # 验证安装
         pip list
     
-    - name: 准备 phone.dat 文件（如果不存在）
+    - name: 准备 phone.dat 文件
       run: |
-        # 如果仓库中没有 phone.dat，这里可以添加下载逻辑
-        # 如果有 phone.dat 文件，它会自动被检出
-        echo "检查 phone.dat 文件..."
         if (Test-Path phone.dat) {
           echo "phone.dat 已存在"
         } else {
           echo "警告: phone.dat 文件不存在"
-          # 这里可以添加从网络下载的代码（如果需要）
-          # Invoke-WebRequest -Uri "phone.dat下载链接" -OutFile phone.dat
+          echo "请确保仓库中包含 phone.dat 文件"
         }
     
-    - name: 测试 Python 脚本
+    - name: 测试脚本导入
       run: |
-        # 测试脚本是否能正常导入
-        echo "测试脚本导入..."
         python -c "
 try:
     from phone import Phone
@@ -79,38 +68,39 @@ except Exception as e:
     
     - name: 创建打包脚本
       run: |
-        # 创建专门的打包脚本
-        $pyinstallerConfig = @"
-# 打包配置脚本
+        # 创建打包脚本
+        $buildScript = @'
 import subprocess
 import sys
 import os
+
+print("开始打包...")
+
+# 检查必要文件
+required_files = ["iphoneLocation3.0.py", "phone.dat"]
+for f in required_files:
+    if not os.path.exists(f):
+        print(f"错误: 缺少必要文件 {f}")
+        sys.exit(1)
 
 # PyInstaller 命令
 cmd = [
     'pyinstaller',
     'iphoneLocation3.0.py',
-    '--name=利辛农商行电话回访辅助',  # 设置exe名称
-    '--onefile',  # 单文件
-    '--windowed',  # 无控制台窗口
-    '--clean',  # 清理缓存
-    '--noconfirm',  # 覆盖确认
-    # Win7 兼容性参数
+    '--name=利辛农商行电话回访辅助',
+    '--onefile',
+    '--windowed',
+    '--clean',
+    '--noconfirm',
     '--win-private-assemblies',
-    '--exclude-module=tkinter',  # 排除可能的问题模块
-    # 添加数据文件（phone.dat）
-    '--add-data=phone.dat;.',  # 分号分隔（Windows）
-    # 隐藏版本信息
-    '--version-file=version_info.txt' if os.path.exists('version_info.txt') else ''
+    '--exclude-module=tkinter',
+    '--add-data=phone.dat;.',
 ]
-
-# 移除空字符串
-cmd = [c for c in cmd if c]
 
 print(f"打包命令: {' '.join(cmd)}")
 
 # 执行打包
-result = subprocess.run(cmd, capture_output=True, text=True)
+result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
 print("标准输出:", result.stdout)
 if result.stderr:
     print("标准错误:", result.stderr)
@@ -120,12 +110,12 @@ if result.returncode != 0:
     sys.exit(1)
 else:
     print("打包成功！")
-"@
+'@
         
-        Set-Content -Path "build.py" -Value $pyinstallerConfig
+        Set-Content -Path "build.py" -Value $buildScript
         
-        # 创建版本信息文件（可选）
-        $versionInfo = @"
+        # 创建版本信息文件
+        $versionInfo = @'
 VSVersionInfo(
   ffi=FixedFileInfo(
     filevers=(1, 0, 0, 0),
@@ -153,15 +143,13 @@ VSVersionInfo(
     VarFileInfo([VarStruct(u'Translation', [0x409, 1200])])
   ]
 )
-"@
+'@
         
         Set-Content -Path "version_info.txt" -Value $versionInfo
     
     - name: 执行打包
       run: |
         python build.py
-        
-        # 检查生成的exe
         if (Test-Path "dist/利辛农商行电话回访辅助.exe") {
           echo "EXE 生成成功"
           dir dist\
@@ -172,30 +160,21 @@ VSVersionInfo(
     
     - name: 创建测试文件
       run: |
-        # 创建一个示例 peopleList.csv 用于测试
-        $sampleCSV = @"
+        $sampleCSV = @'
 客户姓名,手机号码,担保人姓名,手机号码.1
 张三,13805581234,李四,13905585678
 王五,18712345678,赵六,18887654321
-"@
-        
+'@
         Set-Content -Path "peopleList.csv" -Value $sampleCSV -Encoding UTF8
-        echo "创建测试CSV文件完成"
     
     - name: 验证打包文件
       run: |
-        echo "检查生成的文件结构..."
+        echo "检查文件..."
         dir
-        
-        echo "检查exe大小..."
         $exePath = "dist/利辛农商行电话回访辅助.exe"
         if (Test-Path $exePath) {
           $exeSize = (Get-Item $exePath).Length / 1MB
           echo "EXE 文件大小: $exeSize MB"
-          
-          # 检查是否包含必要的依赖
-          echo "使用 PyInstaller 分析工具检查..."
-          python -m PyInstaller --version
         }
     
     - name: 上传构建产物
@@ -206,72 +185,38 @@ VSVersionInfo(
           dist/利辛农商行电话回访辅助.exe
           phone.dat
           peopleList.csv
-        retention-days: 30
     
     - name: 创建说明文档
       run: |
-        # 创建使用说明
-        $readme = @"
-# 利辛农商行电话回访辅助工具 - Win7 版本
+        $readme = @'
+利辛农商行电话回访辅助工具 - Win7 版本
 
-## 文件说明
-1. `利辛农商行电话回访辅助.exe` - 主程序
-2. `phone.dat` - 手机号归属地数据库
-3. `peopleList.csv` - 示例输入文件（可替换）
-
-## 使用方法
-1. 将所有文件放在同一目录
-2. 编辑 `peopleList.csv` 填入实际数据
-3. 运行 `利辛农商行电话回访辅助.exe`
+使用方法：
+1. 下载所有文件到同一目录
+2. 编辑 peopleList.csv 填入数据
+3. 运行 EXE 文件
 4. 点击"开始处理"按钮
-5. 生成的 `名片.csv` 即可用于步步高设备
+5. 生成的"名片.csv"即可使用
 
-## 数据格式
-peopleList.csv 应包含以下列：
-- 客户姓名
-- 手机号码
-- 担保人姓名
-- 手机号码.1
-
-## 注意事项
-- 本程序专为 Windows 7 优化
+注意事项：
 - 确保 phone.dat 与 exe 在同一目录
-- 生成的 CSV 使用 GB18030 编码
-
-## 构建信息
-- 构建时间: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-- Python 版本: ${{ matrix.python-version }}
-- PyInstaller: 5.0
-"@
-        
+- CSV文件使用GB18030编码
+- 本程序专为Windows 7优化
+'@
         Set-Content -Path "README_Win7.txt" -Value $readme -Encoding UTF8
-        
-        # 上传说明文档
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @"
+        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @'
 ## ✅ 打包成功！
 生成的 Win7 兼容版本可在 Artifacts 中下载。
 
-**包含文件：**
+包含文件：
 - 利辛农商行电话回访辅助.exe
 - phone.dat（归属地数据库）
 - 示例 CSV 文件
-
-**测试环境要求：**
-- Windows 7 SP1 或更高
-- .NET Framework 4.5 或更高
-- 无需安装 Python
-
-**使用方法：**
-1. 下载 Artifacts 中的所有文件
-2. 编辑 peopleList.csv 填入实际数据
-3. 运行 exe 程序
-4. 点击"开始处理"按钮
-"@
+'@
     
     - name: 清理缓存
       if: always()
       run: |
-        # 清理 PyInstaller 缓存
         Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
         Remove-Item -Recurse -Force __pycache__ -ErrorAction SilentlyContinue
         Remove-Item *.spec -ErrorAction SilentlyContinue
