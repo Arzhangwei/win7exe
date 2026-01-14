@@ -36,37 +36,38 @@ jobs:
         if (!(Test-Path "iphoneLocation3.0.py")) { exit 1 }
         if (!(Test-Path "phone.dat")) { Write-Warning "警告: phone.dat 文件缺失" }
     
-    - name: 创建版本信息文件
-      run: |
-        # 创建 version_info.txt 文件
-        echo VSVersionInfo( > version_info.txt
-        echo   ffi=FixedFileInfo( >> version_info.txt
-        echo     filevers=(1, 0, 0, 0), >> version_info.txt
-        echo     prodvers=(1, 0, 0, 0), >> version_info.txt
-        echo     mask=0x3f, >> version_info.txt
-        echo     flags=0x0, >> version_info.txt
-        echo     OS=0x40004, >> version_info.txt
-        echo     fileType=0x1, >> version_info.txt
-        echo     subtype=0x0, >> version_info.txt
-        echo     date=(0, 0) >> version_info.txt
-        echo   ), >> version_info.txt
-        echo   kids=[ >> version_info.txt
-        echo     StringFileInfo([ >> version_info.txt
-        echo       StringTable( >> version_info.txt
-        echo         u'040904B0', >> version_info.txt
-        echo         [StringStruct(u'CompanyName', u'利辛农商行'), >> version_info.txt
-        echo          StringStruct(u'FileDescription', u'电话回访辅助工具'), >> version_info.txt
-        echo          StringStruct(u'FileVersion', u'1.0.0.0'), >> version_info.txt
-        echo          StringStruct(u'InternalName', u'电话回访辅助'), >> version_info.txt
-        echo          StringStruct(u'LegalCopyright', u'Copyright © 2023'), >> version_info.txt
-        echo          StringStruct(u'OriginalFilename', u'利辛农商行电话回访辅助.exe'), >> version_info.txt
-        echo          StringStruct(u'ProductName', u'电话回访辅助工具'), >> version_info.txt
-        echo          StringStruct(u'ProductVersion', u'1.0.0.0')] >> version_info.txt
-        echo       ) >> version_info.txt
-        echo     ]), >> version_info.txt
-        echo     VarFileInfo([VarStruct(u'Translation', [0x409, 1200])]) >> version_info.txt
-        echo   ] >> version_info.txt
-        echo ) >> version_info.txt
+        - name: 创建版本信息文件
+          run: |
+            # 使用Here-String定义文件内容
+            @'
+        VSVersionInfo(
+          ffi=FixedFileInfo(
+            filevers=(1, 0, 0, 0),
+            prodvers=(1, 0, 0, 0),
+            mask=0x3f,
+            flags=0x0,
+            OS=0x40004,
+            fileType=0x1,
+            subtype=0x0,
+            date=(0, 0)
+          ),
+          kids=[
+            StringFileInfo([
+              StringTable(
+                u'040904B0',
+                [StringStruct(u'CompanyName', u'利辛农商行'),
+                 StringStruct(u'FileDescription', u'电话回访辅助工具'),
+                 StringStruct(u'FileVersion', u'1.0.0.0'),
+                 StringStruct(u'InternalName', u'电话回访辅助'),
+                 StringStruct(u'LegalCopyright', u'Copyright © 2023'),
+                 StringStruct(u'OriginalFilename', u'利辛农商行电话回访辅助.exe'),
+                 StringStruct(u'ProductName', u'电话回访辅助工具'),
+                 StringStruct(u'ProductVersion', u'1.0.0.0')])
+            ]),
+            VarFileInfo([VarStruct(u'Translation', [0x409, 1200])])
+          ]
+        )
+        '@ | Out-File -FilePath version_info.txt -Encoding UTF8
     
     - name: 执行打包
       run: |
