@@ -31,9 +31,10 @@ jobs:
         pip install phone==0.4.3
     
     - name: 检查必要文件
+      # 这是一个PowerShell脚本
       run: |
-        if not exist iphoneLocation3.0.py exit 1
-        if not exist phone.dat echo "警告: phone.dat 文件缺失"
+        if (!(Test-Path "iphoneLocation3.0.py")) { exit 1 }
+        if (!(Test-Path "phone.dat")) { Write-Warning "警告: phone.dat 文件缺失" }
     
     - name: 创建版本信息文件
       run: |
