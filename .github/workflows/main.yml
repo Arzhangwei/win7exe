@@ -3,8 +3,6 @@ name: Build Win7 Compatible EXE
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
@@ -17,165 +15,77 @@ jobs:
     steps:
     - name: 检出代码
       uses: actions/checkout@v3
-      with:
-        fetch-depth: 0
     
     - name: 设置 Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        architecture: 'x86'
-    
-    - name: 显示 Python 版本信息
-      run: |
-        python --version
-        pip --version
     
     - name: 安装依赖
       run: |
-        python -m pip install --upgrade pip setuptools wheel
+        python -m pip install --upgrade pip
         pip install pyinstaller==5.0
         pip install pandas==1.3.5
         pip install PyQt5==5.15.4
         pip install PyQt5-sip==12.9.0
         pip install phone==0.4.3
-        pip list
     
-    - name: 准备 phone.dat 文件
+    - name: 检查必要文件
       run: |
-        if (Test-Path phone.dat) {
-          echo "phone.dat 已存在"
-        } else {
-          echo "警告: phone.dat 文件不存在"
-          echo "请确保仓库中包含 phone.dat 文件"
-        }
+        if not exist iphoneLocation3.0.py exit 1
+        if not exist phone.dat echo "警告: phone.dat 文件缺失"
     
-    - name: 测试脚本导入
+    - name: 创建版本信息文件
       run: |
-        python -c "
-try:
-    from phone import Phone
-    print('✓ phone 库导入成功')
-    import pandas as pd
-    print('✓ pandas 导入成功')
-    from PyQt5.QtWidgets import QApplication
-    print('✓ PyQt5 导入成功')
-    print('所有依赖测试通过')
-except Exception as e:
-    print(f'导入失败: {e}')
-    exit(1)
-        "
-    
-    - name: 创建打包脚本
-      run: |
-        # 创建打包脚本
-        $buildScript = @'
-import subprocess
-import sys
-import os
-
-print("开始打包...")
-
-# 检查必要文件
-required_files = ["iphoneLocation3.0.py", "phone.dat"]
-for f in required_files:
-    if not os.path.exists(f):
-        print(f"错误: 缺少必要文件 {f}")
-        sys.exit(1)
-
-# PyInstaller 命令
-cmd = [
-    'pyinstaller',
-    'iphoneLocation3.0.py',
-    '--name=利辛农商行电话回访辅助',
-    '--onefile',
-    '--windowed',
-    '--clean',
-    '--noconfirm',
-    '--win-private-assemblies',
-    '--exclude-module=tkinter',
-    '--add-data=phone.dat;.',
-]
-
-print(f"打包命令: {' '.join(cmd)}")
-
-# 执行打包
-result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8')
-print("标准输出:", result.stdout)
-if result.stderr:
-    print("标准错误:", result.stderr)
-
-if result.returncode != 0:
-    print(f"打包失败，返回码: {result.returncode}")
-    sys.exit(1)
-else:
-    print("打包成功！")
-'@
-        
-        Set-Content -Path "build.py" -Value $buildScript
-        
-        # 创建版本信息文件
-        $versionInfo = @'
-VSVersionInfo(
-  ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
-    mask=0x3f,
-    flags=0x0,
-    OS=0x40004,
-    fileType=0x1,
-    subtype=0x0,
-    date=(0, 0)
-  ),
-  kids=[
-    StringFileInfo([
-      StringTable(
-        u'040904B0',
-        [StringStruct(u'CompanyName', u'利辛农商行'),
-         StringStruct(u'FileDescription', u'电话回访辅助工具'),
-         StringStruct(u'FileVersion', u'1.0.0.0'),
-         StringStruct(u'InternalName', u'电话回访辅助'),
-         StringStruct(u'LegalCopyright', u'Copyright © 2023'),
-         StringStruct(u'OriginalFilename', u'利辛农商行电话回访辅助.exe'),
-         StringStruct(u'ProductName', u'电话回访辅助工具'),
-         StringStruct(u'ProductVersion', u'1.0.0.0')])
-    ]),
-    VarFileInfo([VarStruct(u'Translation', [0x409, 1200])])
-  ]
-)
-'@
-        
-        Set-Content -Path "version_info.txt" -Value $versionInfo
+        # 创建 version_info.txt 文件
+        echo VSVersionInfo( > version_info.txt
+        echo   ffi=FixedFileInfo( >> version_info.txt
+        echo     filevers=(1, 0, 0, 0), >> version_info.txt
+        echo     prodvers=(1, 0, 0, 0), >> version_info.txt
+        echo     mask=0x3f, >> version_info.txt
+        echo     flags=0x0, >> version_info.txt
+        echo     OS=0x40004, >> version_info.txt
+        echo     fileType=0x1, >> version_info.txt
+        echo     subtype=0x0, >> version_info.txt
+        echo     date=(0, 0) >> version_info.txt
+        echo   ), >> version_info.txt
+        echo   kids=[ >> version_info.txt
+        echo     StringFileInfo([ >> version_info.txt
+        echo       StringTable( >> version_info.txt
+        echo         u'040904B0', >> version_info.txt
+        echo         [StringStruct(u'CompanyName', u'利辛农商行'), >> version_info.txt
+        echo          StringStruct(u'FileDescription', u'电话回访辅助工具'), >> version_info.txt
+        echo          StringStruct(u'FileVersion', u'1.0.0.0'), >> version_info.txt
+        echo          StringStruct(u'InternalName', u'电话回访辅助'), >> version_info.txt
+        echo          StringStruct(u'LegalCopyright', u'Copyright © 2023'), >> version_info.txt
+        echo          StringStruct(u'OriginalFilename', u'利辛农商行电话回访辅助.exe'), >> version_info.txt
+        echo          StringStruct(u'ProductName', u'电话回访辅助工具'), >> version_info.txt
+        echo          StringStruct(u'ProductVersion', u'1.0.0.0')] >> version_info.txt
+        echo       ) >> version_info.txt
+        echo     ]), >> version_info.txt
+        echo     VarFileInfo([VarStruct(u'Translation', [0x409, 1200])]) >> version_info.txt
+        echo   ] >> version_info.txt
+        echo ) >> version_info.txt
     
     - name: 执行打包
       run: |
-        python build.py
-        if (Test-Path "dist/利辛农商行电话回访辅助.exe") {
-          echo "EXE 生成成功"
-          dir dist\
-        } else {
-          echo "EXE 生成失败"
-          exit 1
-        }
+        pyinstaller ^
+          --name="利辛农商行电话回访辅助" ^
+          --onefile ^
+          --windowed ^
+          --clean ^
+          --noconfirm ^
+          --win-private-assemblies ^
+          --exclude-module=tkinter ^
+          --add-data="phone.dat;." ^
+          --version-file=version_info.txt ^
+          iphoneLocation3.0.py
     
-    - name: 创建测试文件
+    - name: 创建测试CSV文件
       run: |
-        $sampleCSV = @'
-客户姓名,手机号码,担保人姓名,手机号码.1
-张三,13805581234,李四,13905585678
-王五,18712345678,赵六,18887654321
-'@
-        Set-Content -Path "peopleList.csv" -Value $sampleCSV -Encoding UTF8
-    
-    - name: 验证打包文件
-      run: |
-        echo "检查文件..."
-        dir
-        $exePath = "dist/利辛农商行电话回访辅助.exe"
-        if (Test-Path $exePath) {
-          $exeSize = (Get-Item $exePath).Length / 1MB
-          echo "EXE 文件大小: $exeSize MB"
-        }
+        echo 客户姓名,手机号码,担保人姓名,手机号码.1 > peopleList.csv
+        echo 张三,13805581234,李四,13905585678 >> peopleList.csv
+        echo 王五,18712345678,赵六,18887654321 >> peopleList.csv
     
     - name: 上传构建产物
       uses: actions/upload-artifact@v3
@@ -185,38 +95,3 @@ VSVersionInfo(
           dist/利辛农商行电话回访辅助.exe
           phone.dat
           peopleList.csv
-    
-    - name: 创建说明文档
-      run: |
-        $readme = @'
-利辛农商行电话回访辅助工具 - Win7 版本
-
-使用方法：
-1. 下载所有文件到同一目录
-2. 编辑 peopleList.csv 填入数据
-3. 运行 EXE 文件
-4. 点击"开始处理"按钮
-5. 生成的"名片.csv"即可使用
-
-注意事项：
-- 确保 phone.dat 与 exe 在同一目录
-- CSV文件使用GB18030编码
-- 本程序专为Windows 7优化
-'@
-        Set-Content -Path "README_Win7.txt" -Value $readme -Encoding UTF8
-        Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @'
-## ✅ 打包成功！
-生成的 Win7 兼容版本可在 Artifacts 中下载。
-
-包含文件：
-- 利辛农商行电话回访辅助.exe
-- phone.dat（归属地数据库）
-- 示例 CSV 文件
-'@
-    
-    - name: 清理缓存
-      if: always()
-      run: |
-        Remove-Item -Recurse -Force build -ErrorAction SilentlyContinue
-        Remove-Item -Recurse -Force __pycache__ -ErrorAction SilentlyContinue
-        Remove-Item *.spec -ErrorAction SilentlyContinue
