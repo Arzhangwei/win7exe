@@ -10,7 +10,8 @@ jobs:
     runs-on: windows-2019
     strategy:
       matrix:
-        python-version: [‘3.8.10’]
+        # 关键修改1：更换为环境可用的版本，并使用英文引号
+        python-version: ['3.8']
 
     steps:
       - name: 检出代码
@@ -19,6 +20,7 @@ jobs:
       - name: 设置 Python
         uses: actions/setup-python@v4
         with:
+          # 关键修改2：引用矩阵中的变量
           python-version: ${{ matrix.python-version }}
 
       - name: 安装依赖
@@ -28,16 +30,15 @@ jobs:
 
       - name: 检查必要文件
         run: |
-          if (-not (Test-Path “iphoneLocation3.0.py”)) { Write-Error “缺少主脚本”； exit 1 }
-          if (-not (Test-Path “phone.dat”)) { Write-Warning “警告：缺少 phone.dat” }
+          if (-not (Test-Path "iphoneLocation3.0.py")) { Write-Error "缺少主脚本"; exit 1 }
+          if (-not (Test-Path "phone.dat")) { Write-Warning "警告：缺少 phone.dat" }
 
-      - name: 执行打包 (简化版)
-        # 已移除 --version-file 参数
-        run: pyinstaller --name=“利辛农商行电话回访辅助” --onefile --windowed --clean --noconfirm --win-private-assemblies --add-data=“phone.dat;.” iphoneLocation3.0.py
+      - name: 执行打包
+        run: pyinstaller --name="利辛农商行电话回访辅助" --onefile --windowed --clean --noconfirm --win-private-assemblies --add-data="phone.dat;." iphoneLocation3.0.py
 
       - name: 创建示例 CSV
         run: |
-          “客户姓名，手机号码，担保人姓名，手机号码.1`n张三，13805581234，李四，13905585678`n王五，18712345678，赵六，18887654321” | Out-File -FilePath peopleList.csv -Encoding utf8
+          "客户姓名,手机号码,担保人姓名,手机号码.1`n张三,13805581234,李四,13905585678`n王五,18712345678,赵六,18887654321" | Out-File -FilePath peopleList.csv -Encoding utf8
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
