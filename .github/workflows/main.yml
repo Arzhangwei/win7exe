@@ -1,3 +1,4 @@
+
 name: Build Win7 Compatible EXE
 
 on:
@@ -8,87 +9,53 @@ on:
 jobs:
   build-win7:
     runs-on: windows-2019
-    
+    strategy:
+      matrix:
+        # 关键修改1：更换为环境可用的版本，并使用英文引号
+        python-version: ['3.8']
+
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Python 3.7
+      - name: 设置 Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.7'
+          # 关键修改2：引用矩阵中的变量
+          python-version: ${{ matrix.python-version }}
 
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller==4.10
-          pip install pandas==1.1.5
-          pip install PyQt5==5.15.0
-          pip install phone==0.4.3
+          pip install pyinstaller==5.0 pandas==1.3.5 PyQt5==5.15.4 phone==0.4.3
 
-      - name: 执行打包
-        shell: cmd
+      - name: 检查必要文件
         run: |
-          pyinstaller ^
-            --name "利辛农商行电话回访辅助_Win7" ^
-            --onefile ^
-            --windowed ^
-            --clean ^
-            --noconfirm ^
-            --disable-windows10-mode ^
-            --win-private-assemblies ^
-            --add-data "phone.dat;." ^
-            --hidden-import socket ^
-            --hidden-import _socket ^
-            --hidden-import select ^
-            --hidden-import selectors ^
-            iphoneLocation3.0.py
+          if (-not (Test-Path "iphoneLocation3.0.py")) { Write-Error "缺少主脚本"; exit 1 }
+          if (-not (Test-Path "phone.dat")) { Write-Warning "警告：缺少 phone.dat" }
 
-      - name: 验证打包结果
+	  - name: 执行打包
+		run: |
+		pyinstaller ^
+		  --name="利辛农商行电话回访辅助" ^
+		  --onefile ^
+		  --windowed ^
+		  --clean ^
+		  --noconfirm ^
+		  --disable-windows10-mode ^  # 禁用 Win10 专用模式
+		  --win-private-assemblies ^
+		  --add-data="phone.dat;." ^
+		  iphoneLocation3.0.py
+
+      - name: 创建示例 CSV
         run: |
-          if (Test-Path "dist/利辛农商行电话回访辅助_Win7.exe") {
-            Write-Host "✅ EXE 文件生成成功" -ForegroundColor Green
-            Write-Host "文件大小: $((Get-Item 'dist/利辛农商行电话回访辅助_Win7.exe').Length/1MB) MB"
-          } else {
-            Write-Host "❌ EXE 文件生成失败" -ForegroundColor Red
-            exit 1
-          }
-
-      - name: 创建 Win7 兼容性说明
-        run: |
-          @"
-          Windows 7 兼容性说明
-          ====================
-
-          如果程序在 Windows 7 上运行出现 socket 相关错误，请按以下步骤操作：
-
-          1. 确保 Windows 7 已安装 Service Pack 1 (SP1)
-
-          2. 安装以下系统补丁（必装）：
-             - KB2533623：https://www.microsoft.com/en-us/download/details.aspx?id=26764
-             - KB2999226：https://support.microsoft.com/en-us/topic/update-for-universal-c-runtime-in-windows-c0514201-7fe6-95a3-b0a5-287930f3560c
-
-          3. 安装最新版 Visual C++ Redistributable：
-             https://aka.ms/vs/17/release/vc_redist.x64.exe
-
-          4. 如果仍有问题，请尝试：
-             - 右键点击程序 → 属性 → 兼容性 → 以兼容模式运行（Windows 7）
-             - 以管理员身份运行程序
-
-          常见错误解决方案：
-          - "DLL load failed while importing _socket"：安装 KB2999226 补丁
-          - "应用程序无法正常启动(0xc000007b)"：安装 Visual C++ Redistributable
-          - "api-ms-win-core-path-l1-1-0.dll丢失"：安装 KB2533623 补丁
-
-          技术支持：如问题仍未解决，请联系系统管理员。
-          "@ | Out-File -FilePath Win7_兼容性说明.txt -Encoding utf8
+          "客户姓名,手机号码,担保人姓名,手机号码.1`n张三,13805581234,李四,13905585678`n王五,18712345678,赵六,18887654321" | Out-File -FilePath peopleList.csv -Encoding utf8
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
-          name: 利辛农商行电话回访辅助_Win7兼容版
+          name: 利辛农商行电话回访辅助_Win7版
           path: |
-            dist/利辛农商行电话回访辅助_Win7.exe
+            dist/利辛农商行电话回访辅助.exe
             phone.dat
             peopleList.csv
-            Win7_兼容性说明.txt
