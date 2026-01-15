@@ -8,43 +8,61 @@ on:
 jobs:
   build-win7:
     runs-on: windows-2019
-    strategy:
-      matrix:
-        # 关键修改1：更换为环境可用的版本，并使用英文引号
-        python-version: ['3.8']
-
+    
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
-      - name: 设置 Python
+      - name: 设置 Python 3.7
         uses: actions/setup-python@v4
         with:
-          # 关键修改2：引用矩阵中的变量
-          python-version: ${{ matrix.python-version }}
+          python-version: '3.7'
 
       - name: 安装依赖
         run: |
-          python -m pip install --upgrade pip
-          pip install pyinstaller==5.0 pandas==1.3.5 PyQt5==5.15.4 phone==0.4.3
+          python -m pip install --upgrade pip setuptools wheel
+          pip install pyinstaller==4.10  # 使用更旧的 pyinstaller
+          pip install pandas==1.1.5  # 旧版 pandas
+          pip install PyQt5==5.15.0
+          pip install phone==0.4.3
 
-      - name: 检查必要文件
+      - name: 执行打包（Win7 专用配置）
         run: |
-          if (-not (Test-Path "iphoneLocation3.0.py")) { Write-Error "缺少主脚本"; exit 1 }
-          if (-not (Test-Path "phone.dat")) { Write-Warning "警告：缺少 phone.dat" }
+          pyinstaller ^
+            --name="利辛农商行电话回访辅助_Win7" ^
+            --onefile ^
+            --windowed ^
+            --clean ^
+            --noconfirm ^
+            --disable-windows10-mode ^
+            --runtime-tmpdir=. ^
+            --win-private-assemblies ^
+            --add-binary="C:\Windows\System32\api-ms-win-core-path-l1-1-0.dll;." ^
+            --add-data="phone.dat;." ^
+            --hidden-import=socket ^
+            --hidden-import=_socket ^
+            --hidden-import=select ^
+            --hidden-import=selectors ^
+            --hidden-import=queue ^
+            --hidden-import=multiprocessing ^
+            --hidden-import=multiprocessing.pool ^
+            --hidden-import=multiprocessing.util ^
+            iphoneLocation3.0.py
 
-      - name: 执行打包
-        run: pyinstaller --name="利辛农商行电话回访辅助" --onefile --windowed --clean --noconfirm --win-private-assemblies --add-data="phone.dat;." iphoneLocation3.0.py
-
-      - name: 创建示例 CSV
+      - name: 创建 Readme 说明文件
         run: |
-          "客户姓名,手机号码,担保人姓名,手机号码.1`n张三,13805581234,李四,13905585678`n王五,18712345678,赵六,18887654321" | Out-File -FilePath peopleList.csv -Encoding utf8
+          echo "Windows 7 用户注意事项：" > Win7_Readme.txt
+          echo "1. 确保系统已安装 Service Pack 1" >> Win7_Readme.txt
+          echo "2. 安装 KB2533623 补丁" >> Win7_Readme.txt
+          echo "3. 安装 KB2999226 补丁（Visual C++ Redistributable）" >> Win7_Readme.txt
+          echo "4. 如有问题，请右键以管理员身份运行" >> Win7_Readme.txt
 
       - name: 上传构建产物
         uses: actions/upload-artifact@v4
         with:
           name: 利辛农商行电话回访辅助_Win7版
           path: |
-            dist/利辛农商行电话回访辅助.exe
+            dist/利辛农商行电话回访辅助_Win7.exe
             phone.dat
             peopleList.csv
+            Win7_Readme.txt
