@@ -1,9 +1,8 @@
-
 name: Build Win7 Compatible EXE
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [main, master]
   workflow_dispatch:
 
 jobs:
@@ -11,8 +10,7 @@ jobs:
     runs-on: windows-2019
     strategy:
       matrix:
-        # 关键修改1：更换为环境可用的版本，并使用英文引号
-        python-version: ['3.8']
+        python-version: ['3.8']   # 关键修改1：更换为环境可用的版本，并使用英文引号
 
     steps:
       - name: 检出代码
@@ -21,8 +19,7 @@ jobs:
       - name: 设置 Python
         uses: actions/setup-python@v4
         with:
-          # 关键修改2：引用矩阵中的变量
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version }}   # 关键修改2：引用矩阵中的变量
 
       - name: 安装依赖
         run: |
@@ -30,15 +27,17 @@ jobs:
           pip install pyinstaller==4.0 pandas==1.3.5 PyQt5==5.15.4 phone==0.4.3
 
       - name: 检查必要文件
+        shell: pwsh
         run: |
           if (-not (Test-Path "iphoneLocation3.0.py")) { Write-Error "缺少主脚本"; exit 1 }
           if (-not (Test-Path "phone.dat")) { Write-Warning "警告：缺少 phone.dat" }
 
-	  - name: 执行打包 (完整路径方式)
+      - name: 执行打包（完整路径方式）
+        shell: pwsh
         run: |
           # 获取 pyinstaller 的完整路径
-          $pyinstallerPath = python -c "import pyinstaller; import os; print(os.path.join(os.path.dirname(pyinstaller.__file__), '__main__.py'))"
-          
+          $pyinstallerPath = python -c "import PyInstaller,os;print(os.path.join(os.path.dirname(PyInstaller.__file__),'__main__.py'))"
+
           # 直接执行 Python 脚本
           python "$pyinstallerPath" `
             --name="利辛农商行电话回访辅助" `
