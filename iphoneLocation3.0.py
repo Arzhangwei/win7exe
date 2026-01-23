@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-from __future__ import annotations  # 新增此行，解决Python 3.8的类型注解兼容性问题
+from __future__ import annotations  # 解决Python 3.8的类型注解兼容性问题
 
 """
 读取 peopleList.csv → 生成步步高 USB 电话通讯录专用 CSV
+优化功能：支持客户经理列，输出格式为：序号.客户姓名_客户经理_手机
 打包：pyinstaller -F -w bbk_csv_tool.py
 用于GitHub action编译 win7 exe
 """
@@ -13,7 +14,9 @@ import csv
 import pandas as pd
 from phone import Phone
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout,
-                             QPushButton, QTextEdit, QMessageBox)
+                             QPushButton, QTextEdit, QMessageBox,
+                             QLabel, QHBoxLayout, QCheckBox)
+from PyQt5.QtCore import QCoreApplication
 
 # ----------------------------------------------------------
 # 路径工具：打包后 exe 同目录，开发时脚本目录
@@ -25,7 +28,9 @@ def current_dir() -> str:
 
 def res_path(*names) -> str:
     full = os.path.join(current_dir(), *names)
-    os.makedirs(os.path.dirname(full), exist_ok=True)
+    # 只创建目录，不创建文件
+    if names:
+        os.makedirs(os.path.dirname(full), exist_ok=True)
     return full
 
 # ----------------------------------------------------------
@@ -41,10 +46,14 @@ BBK_HEADER = ["姓名", "移动电话", "办公电话", "家庭电话", "备注"
 # 写 CSV 工具：GB18030 无 BOM
 # ----------------------------------------------------------
 def write_bbk_csv(path, rows: list[list[str]]):
-    with open(path, 'w', newline='', encoding='gb18030') as f:
-        writer = csv.writer(f)
-        writer.writerow(BBK_HEADER)
-        writer.writerows(rows)
+    try:
+        with open(path, 'w', newline='', encoding='gb18030') as f:
+            writer = csv.writer(f)
+            writer.writerow(BBK_HEADER)
+            writer.writerows(rows)
+        return True
+    except Exception as e:
+        raise Exception(f"写入文件失败: {str(e)}")
 
 # ----------------------------------------------------------
 # Qt 界面
@@ -53,114 +62,300 @@ class MainWin(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('利辛农商行电话回访辅助（CSV→步步高）')
-        self.resize(420, 300)
+        self.resize(500, 400)
+        self.is_processing = False  # 防止重复点击
 
+        # 配置选项
+        self.include_manager_cb = QCheckBox('包含客户经理姓名')
+        self.include_manager_cb.setChecked(True)
+        self.include_manager_cb.setToolTip('勾选后，在姓名中显示客户经理姓名')
+        
+        config_label = QLabel('输出配置：')
         self.run_btn = QPushButton('开始处理')
         self.log = QTextEdit(readOnly=True)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.run_btn)
-        layout.addWidget(self.log)
+        
+        # 创建布局
+        main_layout = QVBoxLayout(self)
+        
+        # 配置区域
+        config_layout = QHBoxLayout()
+        config_layout.addWidget(config_label)
+        config_layout.addWidget(self.include_manager_cb)
+        config_layout.addStretch()
+        
+        # 按钮区域
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.run_btn)
+        
+        # 添加部件到主布局
+        main_layout.addLayout(config_layout)
+        main_layout.addLayout(button_layout)
+        main_layout.addWidget(self.log)
 
         self.run_btn.clicked.connect(self.work)
 
+        # 检查必要文件
+        self.check_required_files()
+
+    def check_required_files(self):
+        """检查必要文件是否存在"""
+        missing_files = []
         if not os.path.exists(DAT_PATH):
-            QMessageBox.warning(self, '提示', f'请将 phone.dat 放于：\n{current_dir()}')
+            missing_files.append(f'phone.dat - 归属地查询库')
+        if not os.path.exists(CSV_FILE):
+            missing_files.append(f'peopleList.csv - 数据源文件')
+        
+        if missing_files:
+            msg = "缺少以下必要文件，请将它们放在程序目录下：\n\n"
+            for f in missing_files:
+                msg += f"• {f}\n"
+            msg += f"\n程序目录：{current_dir()}"
+            QMessageBox.warning(self, '文件缺失', msg)
 
     # -------------- 工具 --------------
     def need_prefix(self, mobile: str) -> bool:
-        info = Phone(dat_file=DAT_PATH).find(mobile) or {}
-        return info.get('area_code') != '0558' or info.get('city') != '亳州'
+        """检查是否需要添加长途前缀"""
+        try:
+            # 清理手机号
+            mobile_clean = ''.join(filter(str.isdigit, str(mobile)))
+            if not mobile_clean:
+                return False
+                
+            info = Phone(dat_file=DAT_PATH).find(mobile_clean) or {}
+            return info.get('area_code') != '0558' or info.get('city') != '亳州'
+        except Exception:
+            # 如果查询失败，默认不加前缀
+            return False
+
+    def format_name(self, name: str, mobile: str, role: str, manager: str = "", 
+                    include_manager: bool = True, seq: int = 0) -> str:
+        """格式化姓名，包含序号、角色和客户经理信息"""
+        # 生成三位数序号
+        seq_str = f"{seq:03d}."
+        
+        # 基础名称部分
+        if role == '担保人':
+            base_name = f"{name}_担保"
+        else:
+            base_name = name
+        
+        # 添加客户经理信息 - 修复逻辑
+        if include_manager and manager and manager.strip():
+            formatted_name = f"{seq_str}{base_name}_经办:{manager}"
+        else:
+            formatted_name = f"{seq_str}{base_name}"
+        
+        return formatted_name
 
     # -------------- 主流程 --------------
     def work(self):
-        if not os.path.exists(CSV_FILE):
-            QMessageBox.critical(self, '错误', f'当前目录未找到：\n{CSV_FILE}')
+        """主处理函数"""
+        if self.is_processing:
             return
+            
+        self.is_processing = True
+        self.run_btn.setEnabled(False)
+        self.run_btn.setText("处理中...")
+        QCoreApplication.processEvents()  # 更新界面
+        
         try:
-            # 尝试多种编码格式读取
-            encodings_to_try = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030']
-            df = None
-            last_error = None
+            if not os.path.exists(CSV_FILE):
+                QMessageBox.critical(self, '错误', f'当前目录未找到：\n{CSV_FILE}')
+                return
+            
+            # 获取配置
+            include_manager = self.include_manager_cb.isChecked()
+            
+            try:
+                # 尝试多种编码格式读取CSV
+                df = self.read_csv_with_encodings()
+                
+                # 标准化列名（处理可能的空格或不同命名）
+                df.columns = df.columns.str.strip()
+                
+                # 打印列名用于调试
+                print("CSV列名：", df.columns.tolist())
+                
+            except Exception as e:
+                QMessageBox.critical(self, '读取CSV失败', 
+                                   f'文件编码无法识别或格式错误。\n请确保文件使用UTF-8或GBK编码保存。\n\n错误详情:\n{str(e)}')
+                return
 
-            for enc in encodings_to_try:
-                try:
-                    df = pd.read_csv(CSV_FILE, dtype=str, encoding=enc).fillna('')
-                    print(f"成功使用编码读取: {enc}")  # 调试信息，打包后可移除
-                    break  # 读取成功则跳出循环
-                except UnicodeDecodeError as e:
-                    last_error = e
-                    continue  # 尝试下一种编码
+            # 处理数据
+            records = self.process_dataframe(df, include_manager)
+            
+            if not records:
+                QMessageBox.information(self, '提示', '未找到任何有效手机号')
+                return
 
-            if df is None:
-                # 所有编码都失败，抛出最后一个错误
-                raise last_error
+            # 写步步高 CSV
+            success = self.write_output_csv(records)
+            if not success:
+                return
+
+            # 显示日志
+            self.display_log(records, include_manager)
+            
+            QMessageBox.information(self, '处理完成', 
+                                  f'成功生成 {len(records)} 条记录\n输出文件：{VCARD_CSV}')
             
         except Exception as e:
-            QMessageBox.critical(self, '读 csv 失败', f'文件编码无法识别。\n请确保文件使用 UTF-8 或 GBK 编码保存。\n\n错误详情:\n{str(e)}')
-            return
+            QMessageBox.critical(self, '处理异常', f'处理过程中出现异常：\n{str(e)}')
+        finally:
+            self.is_processing = False
+            self.run_btn.setEnabled(True)
+            self.run_btn.setText("开始处理")
 
-        # 逐行从左到右扫描：客户姓名/手机/担保人姓名/手机
-        records = []  # 存储原始记录，用于后续添加序号
-        for _, line in df.iterrows():
-            # 客户
-            name1 = str(line.get('客户姓名', '')).strip()
-            mob1  = str(line.get('手机号码', '')).strip()
-            if mob1:
-                if self.need_prefix(mob1):
-                    mob1 = '0' + mob1
-                records.append((name1, mob1, "客户"))
+    def read_csv_with_encodings(self):
+        """尝试多种编码读取CSV文件"""
+        encodings_to_try = ['utf-8', 'utf-8-sig', 'gbk', 'gb18030']
+        df = None
+        last_error = None
+
+        for enc in encodings_to_try:
+            try:
+                df = pd.read_csv(CSV_FILE, dtype=str, encoding=enc).fillna('')
+                print(f"成功使用编码读取: {enc}")
+                return df
+            except UnicodeDecodeError as e:
+                last_error = e
+                continue
+            except Exception as e:
+                last_error = e
+                continue
+
+        if df is None:
+            raise last_error if last_error else Exception("无法读取CSV文件")
+
+    def process_dataframe(self, df: pd.DataFrame, include_manager: bool) -> list:
+        """处理DataFrame，提取记录"""
+        records = []
+        
+        # 可能的列名变体
+        possible_columns = {
+            '客户姓名': ['客户姓名', '客户名称', '姓名'],
+            '客户经理': ['客户经理', '经理', '管户经理', '责任人'],
+            '手机号码': ['手机号码', '手机号', '电话', '联系电话'],
+            '担保人姓名': ['担保人姓名', '担保人', '共同借款人'],
+            '担保人手机': ['手机号码.1', '担保人手机', '担保人电话', '联系电话.1']
+        }
+        
+        # 映射实际列名
+        actual_columns = {}
+        for key, variants in possible_columns.items():
+            for variant in variants:
+                if variant in df.columns:
+                    actual_columns[key] = variant
+                    break
+        
+        print("检测到的列映射：", actual_columns)
+        
+        for idx, line in df.iterrows():
+            # 处理客户记录
+            client_name_col = actual_columns.get('客户姓名')
+            manager_col = actual_columns.get('客户经理')
+            mobile_col = actual_columns.get('手机号码')
             
-            # 担保人
-            name2 = str(line.get('担保人姓名', '')).strip()
-            mob2  = str(line.get('手机号码.1', '')).strip()  # 第二列手机号标题
-            if mob2:
-                if self.need_prefix(mob2):
-                    mob2 = '0' + mob2
-                records.append((name2, mob2, "担保人"))
+            if client_name_col and mobile_col:
+                name = str(line.get(client_name_col, '')).strip()
+                mobile = str(line.get(mobile_col, '')).strip()
+                manager = str(line.get(manager_col, '')) if manager_col else ""
+                
+                if mobile and mobile != 'nan' and len(mobile) >= 11:
+                    # 清理手机号，只保留数字
+                    mobile_clean = ''.join(filter(str.isdigit, mobile))
+                    if len(mobile_clean) >= 11:
+                        if self.need_prefix(mobile_clean):
+                            mobile_clean = '0' + mobile_clean
+                        records.append({
+                            '原始姓名': name,
+                            '手机号': mobile_clean,
+                            '角色': '客户',
+                            '客户经理': manager.strip() if manager else ""
+                        })
+            
+            # 处理担保人记录
+            guarantor_name_col = actual_columns.get('担保人姓名')
+            guarantor_mobile_col = actual_columns.get('担保人手机')
+            
+            if guarantor_name_col and guarantor_mobile_col:
+                name = str(line.get(guarantor_name_col, '')).strip()
+                mobile = str(line.get(guarantor_mobile_col, '')).strip()
+                
+                if mobile and mobile != 'nan' and len(mobile) >= 11:
+                    # 清理手机号，只保留数字
+                    mobile_clean = ''.join(filter(str.isdigit, mobile))
+                    if len(mobile_clean) >= 11:
+                        if self.need_prefix(mobile_clean):
+                            mobile_clean = '0' + mobile_clean
+                        # 担保人使用客户的客户经理信息
+                        manager = str(line.get(manager_col, '')) if manager_col else ""
+                        records.append({
+                            '原始姓名': name,
+                            '手机号': mobile_clean,
+                            '角色': '担保人',
+                            '客户经理': manager.strip() if manager else ""
+                        })
+        
+        return records
 
-        if not records:
-            QMessageBox.information(self, '提示', '未找到任何有效手机号')
-            return
-
-        # 添加序号到姓名，格式为：001.姓名_手机
-        rows = []
-        for i, (name, mobile, role) in enumerate(records, 1):
-            # 生成三位数序号，如001, 002, ...
-            seq = f"{i:03d}."  # 格式化为三位数字加一个点
-            # 姓名格式：序号姓名:手机 (添加冒号分隔)
-            if role == '担保人':
-                name_with_seq = f"{seq}{name}_担保_{mobile}"
-            else:
-                name_with_seq = f"{seq}{name}_{mobile}"
-            rows.append([name_with_seq, mobile])
-
-        # 写步步高 CSV
+    def write_output_csv(self, records: list) -> bool:
+        """写入输出CSV文件"""
         try:
-            bbk_rows = [[n, m, '', '', ''] for n, m in rows]
+            # 准备步步高CSV数据
+            bbk_rows = []
+            for i, record in enumerate(records, 1):
+                formatted_name = self.format_name(
+                    record['原始姓名'],
+                    record['手机号'],
+                    record['角色'],
+                    record['客户经理'],
+                    self.include_manager_cb.isChecked(),
+                    i
+                )
+                bbk_rows.append([formatted_name, record['手机号'], '', '', ''])
+            
             write_bbk_csv(VCARD_CSV, bbk_rows)
+            return True
+            
         except PermissionError:
             QMessageBox.warning(self, '文件被占用',
-                                f'请先关闭正在打开的文件再试：\n{VCARD_CSV}')
-            return
+                              f'请先关闭正在打开的文件再试：\n{VCARD_CSV}')
+            return False
         except Exception as e:
             QMessageBox.critical(self, '写CSV失败', str(e))
-            return
+            return False
 
-        # 日志 - 显示带序号的记录
+    def display_log(self, records: list, include_manager: bool):
+        """显示处理日志"""
         text_lines = []
-        for i, (name, mobile, role) in enumerate(records, 1):
+        
+        for i, record in enumerate(records, 1):
             seq = f"{i:03d}."
-            text_lines.append(f"{seq} {role}: {name} - {mobile}")
+            name_part = f"{record['原始姓名']}"
+            
+            if include_manager and record['客户经理']:
+                name_part = f"{name_part}(客户经理:{record['客户经理']})"
+            
+            if record['角色'] == '担保人':
+                text_lines.append(f"{seq} 担保人: {name_part} - {record['手机号']}")
+            else:
+                text_lines.append(f"{seq} 客户: {name_part} - {record['手机号']}")
         
-        text = '\n'.join(text_lines)
-        self.log.setPlainText(f'共生成 {len(records)} 条记录，已写入步步高兼容CSV：\n\n' + text)
-        
-        
+        summary = f"""
+处理完成！
+共生成 {len(records)} 条记录
+输出文件：{VCARD_CSV}
+包含客户经理：{'是' if include_manager else '否'}
+
+详细记录：
+"""
+        self.log.setPlainText(summary + '\n'.join(text_lines))
 
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(True)  # 确保关闭窗口时退出
     w = MainWin()
     w.show()
     sys.exit(app.exec_())
