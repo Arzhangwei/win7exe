@@ -4,7 +4,7 @@ from __future__ import annotations  # 解决Python 3.8的类型注解兼容性�
 
 """
 读取 peopleList.csv → 生成步步高 USB 电话通讯录专用 CSV
-优化功能：支持客户经理列，输出格式为：序号.客户姓名_客户经理_手机
+优化功能：支持客户经理列，输出格式可配置
 打包：pyinstaller -F -w bbk_csv_tool.py
 用于GitHub action编译 win7 exe
 """
@@ -15,8 +15,9 @@ import pandas as pd
 from phone import Phone
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout,
                              QPushButton, QTextEdit, QMessageBox,
-                             QLabel, QHBoxLayout, QCheckBox)
-from PyQt5.QtCore import QCoreApplication
+                             QLabel, QHBoxLayout, QCheckBox, QGroupBox,
+                             QGridLayout)
+from PyQt5.QtCore import QCoreApplication, Qt
 
 # ----------------------------------------------------------
 # 路径工具：打包后 exe 同目录，开发时脚本目录
@@ -62,40 +63,127 @@ class MainWin(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle('利辛农商行电话回访辅助（CSV→步步高）')
-        self.resize(500, 400)
+        self.resize(600, 450)
         self.is_processing = False  # 防止重复点击
 
-        # 配置选项
-        self.include_manager_cb = QCheckBox('包含客户经理姓名')
-        self.include_manager_cb.setChecked(True)
-        self.include_manager_cb.setToolTip('勾选后，在姓名中显示客户经理姓名')
+        # 创建控件
+        self.create_widgets()
         
-        config_label = QLabel('输出配置：')
-        self.run_btn = QPushButton('开始处理')
-        self.log = QTextEdit(readOnly=True)
+        # 设置布局
+        self.setup_layout()
         
-        # 创建布局
-        main_layout = QVBoxLayout(self)
-        
-        # 配置区域
-        config_layout = QHBoxLayout()
-        config_layout.addWidget(config_label)
-        config_layout.addWidget(self.include_manager_cb)
-        config_layout.addStretch()
-        
-        # 按钮区域
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.run_btn)
-        
-        # 添加部件到主布局
-        main_layout.addLayout(config_layout)
-        main_layout.addLayout(button_layout)
-        main_layout.addWidget(self.log)
-
+        # 连接信号
         self.run_btn.clicked.connect(self.work)
 
         # 检查必要文件
         self.check_required_files()
+
+    def create_widgets(self):
+        """创建所有界面控件"""
+        # 配置选项组
+        self.config_group = QGroupBox('输出配置')
+        
+        # 配置复选框
+        self.include_manager_cb = QCheckBox('包含客户经理姓名')
+        self.include_manager_cb.setChecked(True)
+        self.include_manager_cb.setToolTip('在姓名中显示客户经理姓名')
+        
+        self.include_phone_cb = QCheckBox('包含手机号码')
+        self.include_phone_cb.setChecked(True)
+        self.include_phone_cb.setToolTip('在姓名中显示手机号码')
+        
+        self.include_seq_cb = QCheckBox('包含序号')
+        self.include_seq_cb.setChecked(True)
+        self.include_seq_cb.setToolTip('在姓名前添加序号（001. 格式）')
+        
+        # 格式化示例标签
+        self.format_example_label = QLabel()
+        self.update_format_example()
+        
+        # 连接复选框信号，更新示例
+        self.include_manager_cb.stateChanged.connect(self.update_format_example)
+        self.include_phone_cb.stateChanged.connect(self.update_format_example)
+        self.include_seq_cb.stateChanged.connect(self.update_format_example)
+        
+        # 处理按钮
+        self.run_btn = QPushButton('开始处理')
+        self.run_btn.setFixedHeight(40)
+        self.run_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                font-weight: bold;
+                border-radius: 5px;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        
+        # 日志文本框
+        self.log = QTextEdit(readOnly=True)
+        self.log.setPlaceholderText('处理日志将显示在这里...')
+        self.log.setStyleSheet("""
+            QTextEdit {
+                background-color: #f5f5f5;
+                border: 1px solid #ddd;
+                border-radius: 3px;
+                padding: 5px;
+            }
+        """)
+
+    def setup_layout(self):
+        """设置界面布局"""
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(15)
+        
+        # 配置组布局
+        config_layout = QGridLayout()
+        config_layout.addWidget(self.include_manager_cb, 0, 0)
+        config_layout.addWidget(self.include_phone_cb, 0, 1)
+        config_layout.addWidget(self.include_seq_cb, 1, 0)
+        config_layout.addWidget(QLabel('格式示例:'), 1, 1)
+        config_layout.addWidget(self.format_example_label, 1, 2)
+        config_layout.setColumnStretch(2, 1)
+        
+        self.config_group.setLayout(config_layout)
+        
+        # 添加部件到主布局
+        main_layout.addWidget(self.config_group)
+        main_layout.addWidget(self.run_btn)
+        main_layout.addWidget(QLabel('处理日志:'))
+        main_layout.addWidget(self.log, 1)  # 1表示可拉伸
+
+    def update_format_example(self):
+        """更新格式示例"""
+        include_manager = self.include_manager_cb.isChecked()
+        include_phone = self.include_phone_cb.isChecked()
+        include_seq = self.include_seq_cb.isChecked()
+        
+        # 构建示例文本
+        example_parts = []
+        
+        if include_seq:
+            example_parts.append("001.")
+        
+        example_parts.append("客户姓名")
+
+        if include_phone:
+            example_parts.append("_13800000000")
+        
+        if include_manager:
+            example_parts.append("_经办:张三")
+        
+        
+        
+        example = "".join(example_parts) if example_parts else "客户姓名"
+        
+        # 担保人示例
+        guarantor_example = example.replace("客户姓名", "客户姓名_担保")
+        
+        # 设置标签文本
+        self.format_example_label.setText(f"客户: {example}<br>担保人: {guarantor_example}")
+        self.format_example_label.setStyleSheet("color: #666; font-style: italic;")
 
     def check_required_files(self):
         """检查必要文件是否存在"""
@@ -128,24 +216,33 @@ class MainWin(QWidget):
             return False
 
     def format_name(self, name: str, mobile: str, role: str, manager: str = "", 
-                    include_manager: bool = True, seq: int = 0) -> str:
-        """格式化姓名，包含序号、角色和客户经理信息"""
-        # 生成三位数序号
-        seq_str = f"{seq:03d}."
+                    include_manager: bool = True, include_phone: bool = True, 
+                    include_seq: bool = True, seq: int = 0) -> str:
+        """格式化姓名，根据配置包含序号、角色、客户经理和手机号"""
+        parts = []
         
-        # 基础名称部分
+        # 添加序号
+        if include_seq:
+            parts.append(f"{seq:03d}.")
+        
+
+        # 添加姓名和角色
         if role == '担保人':
-            base_name = f"{name}_担保"
+            parts.append(f"{name}_担保")
         else:
-            base_name = name
+            parts.append(name)
+
+        # 添加手机号
+        if include_phone:
+            parts.append(f"_{mobile}")
         
-        # 添加客户经理信息 - 修复逻辑
+        # 添加客户经理
         if include_manager and manager and manager.strip():
-            formatted_name = f"{seq_str}{base_name}_经办:{manager}"
-        else:
-            formatted_name = f"{seq_str}{base_name}"
+            parts.append(f"_经办:{manager}")
         
-        return formatted_name
+        
+        
+        return "".join(parts)
 
     # -------------- 主流程 --------------
     def work(self):
@@ -156,6 +253,7 @@ class MainWin(QWidget):
         self.is_processing = True
         self.run_btn.setEnabled(False)
         self.run_btn.setText("处理中...")
+        self.log.clear()
         QCoreApplication.processEvents()  # 更新界面
         
         try:
@@ -165,6 +263,8 @@ class MainWin(QWidget):
             
             # 获取配置
             include_manager = self.include_manager_cb.isChecked()
+            include_phone = self.include_phone_cb.isChecked()
+            include_seq = self.include_seq_cb.isChecked()
             
             try:
                 # 尝试多种编码格式读取CSV
@@ -174,7 +274,7 @@ class MainWin(QWidget):
                 df.columns = df.columns.str.strip()
                 
                 # 打印列名用于调试
-                print("CSV列名：", df.columns.tolist())
+                self.log.append(f"检测到CSV列名：{df.columns.tolist()}")
                 
             except Exception as e:
                 QMessageBox.critical(self, '读取CSV失败', 
@@ -189,18 +289,19 @@ class MainWin(QWidget):
                 return
 
             # 写步步高 CSV
-            success = self.write_output_csv(records)
+            success = self.write_output_csv(records, include_manager, include_phone, include_seq)
             if not success:
                 return
 
             # 显示日志
-            self.display_log(records, include_manager)
+            self.display_log(records, include_manager, include_phone, include_seq)
             
             QMessageBox.information(self, '处理完成', 
                                   f'成功生成 {len(records)} 条记录\n输出文件：{VCARD_CSV}')
             
         except Exception as e:
             QMessageBox.critical(self, '处理异常', f'处理过程中出现异常：\n{str(e)}')
+            self.log.append(f"错误: {str(e)}")
         finally:
             self.is_processing = False
             self.run_btn.setEnabled(True)
@@ -215,7 +316,7 @@ class MainWin(QWidget):
         for enc in encodings_to_try:
             try:
                 df = pd.read_csv(CSV_FILE, dtype=str, encoding=enc).fillna('')
-                print(f"成功使用编码读取: {enc}")
+                self.log.append(f"成功使用 {enc} 编码读取文件")
                 return df
             except UnicodeDecodeError as e:
                 last_error = e
@@ -248,7 +349,7 @@ class MainWin(QWidget):
                     actual_columns[key] = variant
                     break
         
-        print("检测到的列映射：", actual_columns)
+        self.log.append(f"列映射结果: {actual_columns}")
         
         for idx, line in df.iterrows():
             # 处理客户记录
@@ -261,17 +362,18 @@ class MainWin(QWidget):
                 mobile = str(line.get(mobile_col, '')).strip()
                 manager = str(line.get(manager_col, '')) if manager_col else ""
                 
-                if mobile and mobile != 'nan' and len(mobile) >= 11:
+                if mobile and mobile != 'nan' and len(mobile) >= 7:  # 放宽长度限制
                     # 清理手机号，只保留数字
                     mobile_clean = ''.join(filter(str.isdigit, mobile))
-                    if len(mobile_clean) >= 11:
+                    if len(mobile_clean) >= 7:  # 至少7位数字
                         if self.need_prefix(mobile_clean):
                             mobile_clean = '0' + mobile_clean
                         records.append({
                             '原始姓名': name,
                             '手机号': mobile_clean,
                             '角色': '客户',
-                            '客户经理': manager.strip() if manager else ""
+                            '客户经理': manager.strip() if manager else "",
+                            '行号': idx + 1  # 添加行号便于调试
                         })
             
             # 处理担保人记录
@@ -282,10 +384,10 @@ class MainWin(QWidget):
                 name = str(line.get(guarantor_name_col, '')).strip()
                 mobile = str(line.get(guarantor_mobile_col, '')).strip()
                 
-                if mobile and mobile != 'nan' and len(mobile) >= 11:
+                if mobile and mobile != 'nan' and len(mobile) >= 7:
                     # 清理手机号，只保留数字
                     mobile_clean = ''.join(filter(str.isdigit, mobile))
-                    if len(mobile_clean) >= 11:
+                    if len(mobile_clean) >= 7:
                         if self.need_prefix(mobile_clean):
                             mobile_clean = '0' + mobile_clean
                         # 担保人使用客户的客户经理信息
@@ -294,12 +396,14 @@ class MainWin(QWidget):
                             '原始姓名': name,
                             '手机号': mobile_clean,
                             '角色': '担保人',
-                            '客户经理': manager.strip() if manager else ""
+                            '客户经理': manager.strip() if manager else "",
+                            '行号': idx + 1
                         })
         
+        self.log.append(f"成功提取 {len(records)} 条有效记录")
         return records
 
-    def write_output_csv(self, records: list) -> bool:
+    def write_output_csv(self, records: list, include_manager: bool, include_phone: bool, include_seq: bool) -> bool:
         """写入输出CSV文件"""
         try:
             # 准备步步高CSV数据
@@ -310,12 +414,15 @@ class MainWin(QWidget):
                     record['手机号'],
                     record['角色'],
                     record['客户经理'],
-                    self.include_manager_cb.isChecked(),
+                    include_manager,
+                    include_phone,
+                    include_seq,
                     i
                 )
                 bbk_rows.append([formatted_name, record['手机号'], '', '', ''])
             
             write_bbk_csv(VCARD_CSV, bbk_rows)
+            self.log.append(f"成功写入文件: {VCARD_CSV}")
             return True
             
         except PermissionError:
@@ -324,31 +431,40 @@ class MainWin(QWidget):
             return False
         except Exception as e:
             QMessageBox.critical(self, '写CSV失败', str(e))
+            self.log.append(f"写入失败: {str(e)}")
             return False
 
-    def display_log(self, records: list, include_manager: bool):
+    def display_log(self, records: list, include_manager: bool, include_phone: bool, include_seq: bool):
         """显示处理日志"""
         text_lines = []
         
         for i, record in enumerate(records, 1):
-            seq = f"{i:03d}."
-            name_part = f"{record['原始姓名']}"
+            # 显示格式化后的完整信息
+            formatted_name = self.format_name(
+                record['原始姓名'],
+                record['手机号'],
+                record['角色'],
+                record['客户经理'],
+                include_manager,
+                include_phone,
+                include_seq,
+                i
+            )
             
-            if include_manager and record['客户经理']:
-                name_part = f"{name_part}(客户经理:{record['客户经理']})"
-            
-            if record['角色'] == '担保人':
-                text_lines.append(f"{seq} 担保人: {name_part} - {record['手机号']}")
-            else:
-                text_lines.append(f"{seq} 客户: {name_part} - {record['手机号']}")
+            text_lines.append(f"{i:03d}. {formatted_name}")
         
         summary = f"""
+{'='*60}
 处理完成！
 共生成 {len(records)} 条记录
 输出文件：{VCARD_CSV}
-包含客户经理：{'是' if include_manager else '否'}
+配置选项：
+  • 包含客户经理：{'是' if include_manager else '否'}
+  • 包含手机号：{'是' if include_phone else '否'}
+  • 包含序号：{'是' if include_seq else '否'}
 
 详细记录：
+{'='*60}
 """
         self.log.setPlainText(summary + '\n'.join(text_lines))
 
@@ -356,6 +472,10 @@ class MainWin(QWidget):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(True)  # 确保关闭窗口时退出
+    
+    # 设置应用程序样式
+    app.setStyle('Fusion')
+    
     w = MainWin()
     w.show()
     sys.exit(app.exec_())
