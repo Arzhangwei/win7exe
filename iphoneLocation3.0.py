@@ -174,8 +174,6 @@ class MainWin(QWidget):
         if include_manager:
             example_parts.append("_经办:张三")
         
-        
-        
         example = "".join(example_parts) if example_parts else "客户姓名"
         
         # 担保人示例
@@ -240,8 +238,6 @@ class MainWin(QWidget):
         if include_manager and manager and manager.strip():
             parts.append(f"_经办:{manager}")
         
-        
-        
         return "".join(parts)
 
     # -------------- 主流程 --------------
@@ -288,7 +284,7 @@ class MainWin(QWidget):
                 QMessageBox.information(self, '提示', '未找到任何有效手机号')
                 return
 
-            # 写步步高 CSV
+            # 写步步高 CSV（关键：手机号前加 \t 强制文本）
             success = self.write_output_csv(records, include_manager, include_phone, include_seq)
             if not success:
                 return
@@ -361,11 +357,10 @@ class MainWin(QWidget):
                 name = str(line.get(client_name_col, '')).strip()
                 mobile = str(line.get(mobile_col, '')).strip()
                 manager = str(line.get(manager_col, '')) if manager_col else ""
-                
-                if mobile and mobile != 'nan' and len(mobile) >= 7:  # 放宽长度限制
-                    # 清理手机号，只保留数字
+
+                if mobile and mobile != 'nan' and len(mobile) >= 7:
                     mobile_clean = ''.join(filter(str.isdigit, mobile))
-                    if len(mobile_clean) >= 7:  # 至少7位数字
+                    if len(mobile_clean) >= 7:
                         if self.need_prefix(mobile_clean):
                             mobile_clean = '0' + mobile_clean
                         records.append({
@@ -373,7 +368,7 @@ class MainWin(QWidget):
                             '手机号': mobile_clean,
                             '角色': '客户',
                             '客户经理': manager.strip() if manager else "",
-                            '行号': idx + 1  # 添加行号便于调试
+                            '行号': idx + 1
                         })
             
             # 处理担保人记录
@@ -385,12 +380,10 @@ class MainWin(QWidget):
                 mobile = str(line.get(guarantor_mobile_col, '')).strip()
                 
                 if mobile and mobile != 'nan' and len(mobile) >= 7:
-                    # 清理手机号，只保留数字
                     mobile_clean = ''.join(filter(str.isdigit, mobile))
                     if len(mobile_clean) >= 7:
                         if self.need_prefix(mobile_clean):
                             mobile_clean = '0' + mobile_clean
-                        # 担保人使用客户的客户经理信息
                         manager = str(line.get(manager_col, '')) if manager_col else ""
                         records.append({
                             '原始姓名': name,
@@ -404,9 +397,8 @@ class MainWin(QWidget):
         return records
 
     def write_output_csv(self, records: list, include_manager: bool, include_phone: bool, include_seq: bool) -> bool:
-        """写入输出CSV文件"""
+        """写入输出CSV文件，确保手机号在WPS中为文本格式"""
         try:
-            # 准备步步高CSV数据
             bbk_rows = []
             for i, record in enumerate(records, 1):
                 formatted_name = self.format_name(
@@ -419,10 +411,12 @@ class MainWin(QWidget):
                     include_seq,
                     i
                 )
-                bbk_rows.append([formatted_name, record['手机号'], '', '', ''])
+                # 👇 关键优化：在手机号前加 \t，强制WPS/Excel识别为文本
+                mobile_as_text = "\t" + record['手机号']
+                bbk_rows.append([formatted_name, mobile_as_text, '', '', ''])
             
             write_bbk_csv(VCARD_CSV, bbk_rows)
-            self.log.append(f"成功写入文件: {VCARD_CSV}")
+            self.log.append(f"成功写入文件: {VCARD_CSV}（手机号已强制为文本格式）")
             return True
             
         except PermissionError:
@@ -439,7 +433,6 @@ class MainWin(QWidget):
         text_lines = []
         
         for i, record in enumerate(records, 1):
-            # 显示格式化后的完整信息
             formatted_name = self.format_name(
                 record['原始姓名'],
                 record['手机号'],
@@ -450,7 +443,6 @@ class MainWin(QWidget):
                 include_seq,
                 i
             )
-            
             text_lines.append(f"{i:03d}. {formatted_name}")
         
         summary = f"""
@@ -471,9 +463,7 @@ class MainWin(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(True)  # 确保关闭窗口时退出
-    
-    # 设置应用程序样式
+    app.setQuitOnLastWindowClosed(True)
     app.setStyle('Fusion')
     
     w = MainWin()
